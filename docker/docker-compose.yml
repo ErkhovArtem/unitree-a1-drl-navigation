@@ -1,0 +1,24 @@
+services:
+  ros-melodic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ros_melodic_container
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - _X11_NO_MITSHM=1
+      - MITSHM=OFF
+      - ROS_MASTER_URI=${ROS_MASTER_URI:-http://192.168.123.12:11311}
+      - ROS_IP=${ROS_IP:-}
+    privileged: true
+    volumes:
+      - /dev:/dev
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ../:/workspace:rw
+      - ./init_container.sh:/init_container.sh:ro
+    stdin_open: true
+    tty: true
+    command: bash -lc "bash /init_container.sh && sleep infinity"

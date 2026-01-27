@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- 
+    Launch файл для запуска инференса политики.
+    Примечание: Если dog_lplanner не является ROS пакетом, используйте run_policy.sh
+  -->
+  
+  <!-- Параметры -->
+  <arg name="dog_lplanner_dir" default="$(find dog_lplanner)" />
+  <arg name="config_path" default="$(arg dog_lplanner_dir)/config/a1_ros1.yaml" />
+  <arg name="model_path" default="$(arg dog_lplanner_dir)/sac_actor.onnx" />
+  <arg name="scan_topic" default="/scan" />
+  <arg name="odom_topic" default="/odom" />
+  <arg name="clicked_point_topic" default="/clicked_point" />
+  <!-- Policy output: directly to /high_cmd -->
+  <arg name="high_cmd_topic" default="/high_cmd" />
+  <arg name="map_frame" default="map" />
+  <arg name="base_frame" default="base_link" />
+  <arg name="inference_rate" default="10.0" />
+  <arg name="target_x" default="5.0" />
+  <arg name="target_y" default="0.0" />
+
+  <!-- RViz velocity vector -->
+  <arg name="cmd_viz_topic" default="/policy_inference/cmd_viz" />
+  <arg name="cmd_viz_frame" default="base_link" />
+  <arg name="cmd_viz_scale" default="1.0" />
+  
+  <!-- RViz configuration -->
+  <arg name="use_rviz" default="true" />
+  <arg name="rviz_config" default="$(arg dog_lplanner_dir)/config/policy_visualization.rviz" />
+  
+  <!-- Нода инференса политики -->
+  <node 
+    name="policy_inference" 
+    pkg="dog_lplanner" 
+    type="policy_inference_ros1.py"
+    output="screen"
+    respawn="false">
+    <param name="config_path" value="$(arg config_path)" />
+    <param name="model_path" value="$(arg model_path)" />
+    <param name="scan_topic" value="$(arg scan_topic)" />
+    <param name="odom_topic" value="$(arg odom_topic)" />
+    <param name="clicked_point_topic" value="$(arg clicked_point_topic)" />
+    <param name="high_cmd_topic" value="$(arg high_cmd_topic)" />
+    <param name="map_frame" value="$(arg map_frame)" />
+    <param name="base_frame" value="$(arg base_frame)" />
+    <param name="inference_rate" value="$(arg inference_rate)" />
+    <param name="target_x" value="$(arg target_x)" />
+    <param name="target_y" value="$(arg target_y)" />
+    <param name="cmd_viz_topic" value="$(arg cmd_viz_topic)" />
+    <param name="cmd_viz_frame" value="$(arg cmd_viz_frame)" />
+    <param name="cmd_viz_scale" value="$(arg cmd_viz_scale)" />
+  </node>
+  
+  <!-- GUI для управления -->
+  <node 
+    name="policy_gui" 
+    pkg="dog_lplanner" 
+    type="policy_gui.py"
+    output="screen"
+    respawn="false">
+  </node>
+  
+  <!-- RViz (опционально) -->
+  <node if="$(arg use_rviz)"
+    name="rviz" 
+    pkg="rviz" 
+    type="rviz"
+    args="-d $(arg rviz_config)"
+    output="screen"
+    respawn="false">
+  </node>
+  
+</launch>

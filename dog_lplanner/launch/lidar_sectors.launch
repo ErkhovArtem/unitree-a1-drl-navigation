@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Отдельная нода для обработки лидара: /scan -> /lidar_sectors (+ viz) -->
+
+  <arg name="scan_topic" default="/scan" />
+  <arg name="sectors_topic" default="/lidar_sectors" />
+  <arg name="publish_viz" default="true" />
+  <arg name="lidar_viz_topic" default="/lidar_sectors/viz" />
+
+  <!-- Можно указать config_path (a1_ros1.yaml), либо задать min/max/num напрямую -->
+  <arg name="config_path" default="" />
+  <arg name="min_range" default="0.25" />
+  <arg name="max_range" default="3.0" />
+  <arg name="num_sectors" default="40" />
+
+  <node
+    name="lidar_sectors"
+    pkg="dog_lplanner"
+    type="lidar_sectors_node.py"
+    output="screen"
+    respawn="false">
+    <param name="scan_topic" value="$(arg scan_topic)" />
+    <param name="sectors_topic" value="$(arg sectors_topic)" />
+    <param name="publish_viz" value="$(arg publish_viz)" />
+    <param name="lidar_viz_topic" value="$(arg lidar_viz_topic)" />
+
+    <param name="config_path" value="$(arg config_path)" />
+    <param name="min_range" value="$(arg min_range)" />
+    <param name="max_range" value="$(arg max_range)" />
+    <param name="num_sectors" value="$(arg num_sectors)" />
+  </node>
+</launch>
+
