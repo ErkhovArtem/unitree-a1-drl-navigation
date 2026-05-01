@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+
+# ROS / Catkin (локальные сборки в корне воркспейса)
+build/
+devel/
+logs/
+install/
+.catkin_workspace
+
+# IDE / редактор
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Веса политики (*.onnx и т.п.) намеренно не игнорируются — остаются в репозитории.
