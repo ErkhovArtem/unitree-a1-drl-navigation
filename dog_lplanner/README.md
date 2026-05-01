@@ -40,70 +40,22 @@ dog_lplanner/
 
 ## Сборка пакета
 
-### 1. Подготовка workspace
-
-Пакет должен быть размещен в catkin workspace. Если у вас уже есть workspace:
-
-```bash
-# В контейнере
-cd /root/catkin_ws/src
-
-# Скопируйте или создайте симлинк на dog_lplanner
-# Например, если пакет в /workspace/dog_lplanner:
-ln -s /workspace/dog_lplanner .
-```
-
-Или если пакет уже в нужном месте:
-
-```bash
-# Проверьте структуру
-cd /root/catkin_ws/src
-ls -la dog_lplanner/
-```
-
-### 2. Сборка
-
 ```bash
 # В контейнере
 cd /root/catkin_ws
-
-# Источите setup.bash если еще не сделали
 source /opt/ros/melodic/setup.bash
-
-# Соберите пакет
 catkin_make
-
-# Или если используете catkin tools:
-# catkin build dog_lplanner
-```
-
-### 3. Установка (опционально)
-
-После сборки пакет автоматически доступен. Но нужно засорсить workspace:
-
-```bash
 source /root/catkin_ws/devel/setup.bash
-```
-
-### 4. Проверка установки
-
-```bash
-# Проверьте что пакет найден
-rospack find dog_lplanner
-
-# Должен вывести путь: /root/catkin_ws/src/dog_lplanner
-```
-
-## Запуск
-
-```bash
-# В контейнере, после source devel/setup.bash
-roslaunch dog_lplanner policy_inference.launch
 ```
 
 ## Использование
 
-1. **Запустите ноду инференса и GUI** (см. выше)
+1. **Запустите ноду инференса и GUI**
+
+   ```bash
+   # В контейнере, после source devel/setup.bash
+   roslaunch dog_lplanner policy_inference.launch
+   ```
 
 2. **В RViz:**
    - Подпишитесь на топик `/lidar_sectors_viz` для визуализации секторов лидара

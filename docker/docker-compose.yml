@@ -22,7 +22,9 @@ services:
     volumes:
       - /dev:/dev
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - ../:/workspace:rw
+      # - ../:/workspace:rw
+      - ../dog_lplanner:/root/catkin_ws/src/dog_lplanner:rw
+      - ../unitree_legged_msgs:/root/catkin_ws/src/unitree_legged_msgs:rw
       - ./init_container.sh:/init_container.sh:ro
     stdin_open: true
     tty: true

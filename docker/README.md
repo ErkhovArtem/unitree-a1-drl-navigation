@@ -44,9 +44,7 @@ docker compose down
 3. Выполняйте команды в контейнере:
    - Через терминал: `./attach_container.sh`
    - Или через интегрированный терминал VSCode: `Ctrl+Shift+~` → `./docker/attach_container.sh`
-
-Файлы автоматически синхронизируются через volume `/workspace` в контейнере.
-
+   
 ## Запуск RViz
 
 В контейнере:
