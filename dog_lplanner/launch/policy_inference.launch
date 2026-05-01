@@ -19,6 +19,7 @@
   <arg name="inference_rate" default="10.0" />
   <arg name="target_x" default="5.0" />
   <arg name="target_y" default="0.0" />
+  <arg name="goal_reached_distance" default="0.35" />
 
   <!-- RViz velocity vector -->
   <arg name="cmd_viz_topic" default="/policy_inference/cmd_viz" />
@@ -47,6 +48,7 @@
     <param name="inference_rate" value="$(arg inference_rate)" />
     <param name="target_x" value="$(arg target_x)" />
     <param name="target_y" value="$(arg target_y)" />
+    <param name="goal_reached_distance" value="$(arg goal_reached_distance)" />
     <param name="cmd_viz_topic" value="$(arg cmd_viz_topic)" />
     <param name="cmd_viz_frame" value="$(arg cmd_viz_frame)" />
     <param name="cmd_viz_scale" value="$(arg cmd_viz_scale)" />

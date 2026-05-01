@@ -38,3 +38,6 @@ target_y: 0.0  # Координата Y цели (м) - используется
 
 # Частота инференса (Hz)
 inference_rate: 10.0
+
+# Расстояние до цели в base_link (м): при dist <= порога /policy_running -> false
+goal_reached_distance: 0.2

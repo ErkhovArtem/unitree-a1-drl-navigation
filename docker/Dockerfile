@@ -67,16 +67,22 @@ RUN mkdir -p /root/catkin_ws/src
 # Создаем директорию для XDG_RUNTIME_DIR
 RUN mkdir -p /tmp/runtime-root && chmod 700 /tmp/runtime-root
 
-# Чтобы в каждом термине (docker exec, новые вкладки) уже был source ROS
-RUN echo 'source /opt/ros/melodic/setup.bash' >> /root/.bashrc
+# Чтобы в каждом термине (docker exec, новые вкладки) уже был source ROS и ROS_IP
+RUN echo 'source /opt/ros/melodic/setup.bash' >> /root/.bashrc && \
+    echo '[ -f /ros_detect_ip.sh ] && . /ros_detect_ip.sh' >> /root/.bashrc
+# bash -lc (login shell) по умолчанию не читает .bashrc — подключаем его
+RUN touch /root/.bash_profile && \
+    grep -q '/root/.bashrc' /root/.bash_profile 2>/dev/null || \
+    echo '[ -f /root/.bashrc ] && . /root/.bashrc' >> /root/.bash_profile
 
-# Копируем и настраиваем entrypoint
+# Копируем и настраиваем entrypoint и авто-ROS_IP (в т.ч. для docker exec bash)
 COPY ros_entrypoint.sh /ros_entrypoint.sh
-RUN chmod +x /ros_entrypoint.sh
+COPY ros_detect_ip.sh /ros_detect_ip.sh
+RUN chmod +x /ros_entrypoint.sh /ros_detect_ip.sh
 
-# Настройка переменных окружения ROS (дефолтные значения)
+# Настройка переменных окружения ROS (дефолтные значения).
+# ROS_IP не задаём: подставится при старте из ros_detect_ip.sh / .bashrc
 ENV ROS_MASTER_URI=http://192.168.123.12:11311
-ENV ROS_IP=
 
 # Настройка рабочей директории
 WORKDIR /root/catkin_ws

@@ -96,28 +96,9 @@ rospack find dog_lplanner
 
 ## Запуск
 
-### Вариант 1: Через launch файл
-
 ```bash
 # В контейнере, после source devel/setup.bash
 roslaunch dog_lplanner policy_inference.launch
-```
-
-### Вариант 2: Через скрипт (если пакет не собран)
-
-```bash
-cd /path/to/dog_lplanner
-./run_policy.sh
-```
-
-### Вариант 3: Вручную
-
-```bash
-# Терминал 1: Нода инференса
-rosrun dog_lplanner policy_inference_ros1.py
-
-# Терминал 2: GUI
-rosrun dog_lplanner policy_gui.py
 ```
 
 ## Использование

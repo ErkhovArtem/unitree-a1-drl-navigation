@@ -103,7 +103,13 @@ class PolicyInferenceNode:
         
         # Частота инференса
         self.inference_rate = rospy.get_param('~inference_rate', 10.0)  # 10 Hz
-        
+        self.goal_reached_distance = float(
+            rospy.get_param(
+                '~goal_reached_distance',
+                config.get('goal_reached_distance', 0.2),
+            )
+        )
+
         # Параметры лидара из конфига (config уже загружен выше)
         min_range = config.get('min_lidar_range', 0.25)
         max_range = config.get('max_lidar_range', 3.0)
@@ -196,6 +202,9 @@ class PolicyInferenceNode:
         rospy.loginfo(f"  Cmd viz topic: {self.cmd_viz_topic} (frame: {self.cmd_viz_frame})")
         rospy.loginfo(f"  Map frame: {self.map_frame}, Base frame: {self.base_frame}")
         rospy.loginfo(f"  Inference rate: {self.inference_rate} Hz")
+        rospy.loginfo(
+            f"  Goal reached: stop policy when distance to target <= {self.goal_reached_distance} m"
+        )
 
     def publish_cmd_visualization(self, vx: float, vy: float, w: float, safe_mode: bool):
         """Публикует в RViz вектор скорости (vx, vy) + подпись."""
@@ -526,7 +535,16 @@ class PolicyInferenceNode:
                 
                 # Получаем информацию о цели
                 distance, sin_angle, cos_angle = self.get_target_info()
-                
+
+                if distance <= self.goal_reached_distance:
+                    rospy.loginfo(
+                        f"Goal reached: distance {distance:.3f} m <= threshold "
+                    )
+                    rospy.set_param('/policy_running', False)
+                    self.publish_cmd_visualization(0.0, 0.0, 0.0, bool(safe_mode))
+                    rate.sleep()
+                    continue
+
                 # Получаем предыдущее действие (если есть)
                 prev_action = None
                 if self.inference.action_history is not None and len(self.inference.action_history) > 0:
