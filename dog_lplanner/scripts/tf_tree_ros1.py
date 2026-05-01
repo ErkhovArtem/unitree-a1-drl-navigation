@@ -23,7 +23,7 @@ from tf2_msgs.msg import TFMessage
 
 
 class _Transform(object):
-    """Transform A->B: p_B = R(q)*p_A + t. Compatible with Python 3.6."""
+    """Point map p_A -> p_B with p_B = R(q)*p_A + t. Compatible with Python 3.6."""
 
     __slots__ = ("t", "q")
 
@@ -110,13 +110,17 @@ class TFGraph:
             self._adj[child].add(parent)
 
     def _edge_transform(self, a: str, b: str) -> Optional[_Transform]:
-        """Return transform A->B if known, using inversion if only B->A is stored."""
-        key = (a, b)
-        if key in self._tf:
-            return self._tf[key]
-        rev = (b, a)
-        if rev in self._tf:
-            return _invert(self._tf[rev])
+        """
+        Return T with p_b = R*p_a + t (point expressed in frame b given coords in frame a).
+
+        ROS stores each edge as (parent, child) with p_parent = R * p_child + t.
+        """
+        # b is parent of a: p_b = R*p_a + t — use message as-is
+        if (b, a) in self._tf:
+            return self._tf[(b, a)]
+        # a is parent of b: p_a = R*p_b + t  =>  p_b = R^{-1}*(p_a - t)
+        if (a, b) in self._tf:
+            return _invert(self._tf[(a, b)])
         return None
 
     def lookup(self, target_frame: str, source_frame: str) -> Optional[_Transform]:

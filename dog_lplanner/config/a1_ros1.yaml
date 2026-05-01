@@ -2,7 +2,7 @@
 # Адаптировано из configs/a1.yaml для ROS1
 
 # Масштаб выходных команд [vx, vy, w] (м/с, м/с, рад/с)
-cmd_scale: [0.8, 0.4, 0.35]
+cmd_scale: [0.3, 0.3, 0.3]
 
 # Параметры лидара
 min_lidar_range: 0.25  # Минимальная дальность (м), исключаем робота
@@ -24,7 +24,7 @@ config_path: "config/a1_ros1.yaml"
 
 # ROS топики
 scan_topic: "/scan"
-odom_topic: "/odom"
+high_state_topic: "/high_state"  # unitree_legged_msgs/HighState, угловая скорость rotateSpeed
 clicked_point_topic: "/clicked_point"  # Топик для целевой точки из RViz
 high_cmd_topic: "/high_cmd"
 

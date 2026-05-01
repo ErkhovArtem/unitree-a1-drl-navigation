@@ -5,8 +5,8 @@ ROS1 нода для инференса политики SAC Actor.
 
 Подписывается на:
 - /scan (sensor_msgs/LaserScan) - данные лидара
-- /odom (nav_msgs/Odometry) - угловая скорость w
-- /clicked_point (geometry_msgs/PointStamped) - целевая точка из RViz (фрейм map)
+- /high_state (unitree_legged_msgs/HighState) - угловая скорость rotateSpeed
+- /clicked_point (geometry_msgs/PointStamped) - цель из RViz; нода переводит точку в map_frame (~map)
 
 Публикует:
 - /high_cmd (unitree_legged_msgs/HighCmd) - команды управления
@@ -24,10 +24,9 @@ from collections import deque
 from typing import Optional
 
 from sensor_msgs.msg import LaserScan
-from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PointStamped, Point
 from visualization_msgs.msg import Marker, MarkerArray
-from unitree_legged_msgs.msg import HighCmd, LED
+from unitree_legged_msgs.msg import HighCmd, HighState, LED
 
 # Импортируем классы для инференса
 import sys
@@ -79,7 +78,7 @@ class PolicyInferenceNode:
         
         # Топики
         self.scan_topic = rospy.get_param('~scan_topic', '/scan')
-        self.odom_topic = rospy.get_param('~odom_topic', '/odom')
+        self.high_state_topic = rospy.get_param('~high_state_topic', '/high_state')
         self.clicked_point_topic = rospy.get_param('~clicked_point_topic', '/clicked_point')
         # Публикуем напрямую в /high_cmd (безопасность через /policy_safe_mode)
         self.high_cmd_topic = rospy.get_param('~high_cmd_topic', '/high_cmd')
@@ -126,15 +125,15 @@ class PolicyInferenceNode:
         # Кэш данных
         self.last_lidar_scan = None
         self.last_lidar_sectors = None
-        self.last_odom = None
+        self.last_high_state = None
         self.current_target_x = self.target_x
         self.current_target_y = self.target_y
         self.target_received = False  # Флаг получения цели из clicked_point
-        
-        # Позиция робота (из odom, в base_link)
-        self.robot_x = 0.0
-        self.robot_y = 0.0
-        self.robot_yaw = 0.0
+        # Цель из RViz: после клика храним в map_frame (~map), в base пересчитываем каждый тик
+        self.goal_source_frame = self.map_frame.strip("/")
+        self.goal_point_x = 0.0
+        self.goal_point_y = 0.0
+        self.goal_point_z = 0.0
         
         # Подписки
         self.scan_sub = rospy.Subscriber(
@@ -144,10 +143,10 @@ class PolicyInferenceNode:
             queue_size=1
         )
         
-        self.odom_sub = rospy.Subscriber(
-            self.odom_topic,
-            Odometry,
-            self.odom_callback,
+        self.high_state_sub = rospy.Subscriber(
+            self.high_state_topic,
+            HighState,
+            self.high_state_callback,
             queue_size=1
         )
         
@@ -191,7 +190,7 @@ class PolicyInferenceNode:
         rospy.loginfo(f"  Model: {model_path}")
         rospy.loginfo(f"  Config: {config_path}")
         rospy.loginfo(f"  Scan topic: {self.scan_topic}")
-        rospy.loginfo(f"  Odom topic: {self.odom_topic}")
+        rospy.loginfo(f"  High state topic: {self.high_state_topic}")
         rospy.loginfo(f"  Clicked point topic: {self.clicked_point_topic}")
         rospy.loginfo(f"  HighCmd topic: {self.high_cmd_topic}")
         rospy.loginfo(f"  Cmd viz topic: {self.cmd_viz_topic} (frame: {self.cmd_viz_frame})")
@@ -276,40 +275,67 @@ class PolicyInferenceNode:
         except Exception as e:
             rospy.logwarn_throttle(1.0, f"Lidar processing/viz failed: {e}")
     
-    def odom_callback(self, msg):
-        """Callback для Odometry."""
-        self.last_odom = msg
-        
-        # Извлекаем позицию и ориентацию (в base_link, обычно 0,0,0)
-        # Но для вычисления цели нам нужна позиция в map, поэтому используем tf
-        # Здесь просто сохраняем сообщение, позицию получим через tf если нужно
-        
-        # Извлекаем yaw из quaternion для локальных вычислений
-        q = msg.pose.pose.orientation
-        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
-        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
-        self.robot_yaw = np.arctan2(siny_cosp, cosy_cosp)
+    def high_state_callback(self, msg):
+        """Callback для HighState: сохраняем состояние, angular_vel берём из rotateSpeed."""
+        self.last_high_state = msg
     
     def clicked_point_callback(self, msg):
-        """Callback для clicked_point из RViz."""
-        # Prefer TF transform into base_frame; fallback to raw coordinates if TF unavailable
-        point_in_base = self.tf_graph.transform_point(self.base_frame, msg)
-        if point_in_base is None:
+        """Callback для clicked_point из RViz.
+
+        RViz кладёт в header.frame_id текущий Fixed Frame; чтобы цель не ломалась при его смене,
+        переводим точку в map_frame и сохраняем только координаты в карте.
+        """
+        src = msg.header.frame_id.strip("/")
+        map_id = self.map_frame.strip("/")
+        point_in_map = self.tf_graph.transform_point(map_id, msg)
+
+        if point_in_map is not None:
+            self.goal_source_frame = map_id
+            self.goal_point_x = float(point_in_map.point.x)
+            self.goal_point_y = float(point_in_map.point.y)
+            self.goal_point_z = float(point_in_map.point.z)
+        else:
             rospy.logwarn_throttle(
                 1.0,
-                f"TF not available yet for {msg.header.frame_id} -> {self.base_frame}. "
-                f"Using raw clicked_point coords as fallback.",
+                f"Cannot transform clicked point {src} -> {map_id}; "
+                f"storing raw in '{src}' (fix TF or set RViz Fixed Frame to {map_id}).",
             )
-            self.current_target_x = msg.point.x
-            self.current_target_y = msg.point.y
-        else:
-            self.current_target_x = point_in_base.point.x
-            self.current_target_y = point_in_base.point.y
+            self.goal_source_frame = src
+            self.goal_point_x = float(msg.point.x)
+            self.goal_point_y = float(msg.point.y)
+            self.goal_point_z = float(msg.point.z)
 
         self.target_received = True
-        rospy.loginfo(
-            f"Target received: ({self.current_target_x:.2f}, {self.current_target_y:.2f}) in {self.base_frame}"
-        )
+
+        stamped_goal = PointStamped()
+        stamped_goal.header.frame_id = self.goal_source_frame
+        stamped_goal.header.stamp = rospy.Time(0)
+        stamped_goal.point.x = self.goal_point_x
+        stamped_goal.point.y = self.goal_point_y
+        stamped_goal.point.z = self.goal_point_z
+
+        point_in_base = self.tf_graph.transform_point(self.base_frame, stamped_goal)
+        if point_in_base is not None:
+            self.current_target_x = point_in_base.point.x
+            self.current_target_y = point_in_base.point.y
+            if point_in_map is not None:
+                rospy.loginfo(
+                    f"Target in {map_id}: ({self.goal_point_x:.2f}, {self.goal_point_y:.2f}) "
+                    f"(click was in '{src}') -> ({self.current_target_x:.2f}, {self.current_target_y:.2f}) "
+                    f"in {self.base_frame}"
+                )
+            else:
+                rospy.loginfo(
+                    f"Target in '{self.goal_source_frame}' (no TF to {map_id}; click was in '{src}'): "
+                    f"({self.goal_point_x:.2f}, {self.goal_point_y:.2f}) -> "
+                    f"({self.current_target_x:.2f}, {self.current_target_y:.2f}) in {self.base_frame}"
+                )
+        else:
+            rospy.logwarn_throttle(
+                1.0,
+                f"Goal in '{self.goal_source_frame}' ({self.goal_point_x:.2f}, {self.goal_point_y:.2f}); "
+                f"waiting for TF {self.goal_source_frame} -> {self.base_frame}",
+            )
     
     def publish_lidar_visualization(self, lidar_sectors):
         """
@@ -354,6 +380,9 @@ class PolicyInferenceNode:
             end_point.x = float(distance * np.cos(angle_center))
             end_point.y = float(distance * np.sin(angle_center))
             end_point.z = 0.0
+
+            # if sector_idx>=20 and sector_idx<=22:
+                # print(f"Id: {sector_idx}, x: {end_point.x}, y: {end_point.y}")
             
             marker.points = [start_point, end_point]
             
@@ -408,22 +437,37 @@ class PolicyInferenceNode:
     def get_target_info(self):
         """
         Вычисляет информацию о цели в локальной системе робота (base_link).
-        
-        Цель уже преобразована в base_link через tf в clicked_point_callback,
-        поэтому просто используем координаты напрямую.
-        
+
+        Если цель задана через clicked_point, она хранится в map_frame (см. clicked_point_callback);
+        на каждом вызове — пересчёт в base_frame по TF, пока робот движется.
+
         Returns:
             (distance, sin_angle, cos_angle)
         """
-        # Если цель не получена, используем fallback значения
         if not self.target_received:
-            # Используем статические параметры как fallback
             target_x = self.target_x
             target_y = self.target_y
         else:
-            # Используем координаты цели в base_link (уже преобразованы через tf)
-            target_x = self.current_target_x
-            target_y = self.current_target_y
+            stamped = PointStamped()
+            stamped.header.frame_id = self.goal_source_frame
+            stamped.header.stamp = rospy.Time(0)
+            stamped.point.x = self.goal_point_x
+            stamped.point.y = self.goal_point_y
+            stamped.point.z = self.goal_point_z
+            point_in_base = self.tf_graph.transform_point(self.base_frame, stamped)
+            if point_in_base is None:
+                rospy.logwarn_throttle(
+                    1.0,
+                    f"TF missing for goal: {self.goal_source_frame} -> {self.base_frame}; "
+                    f"using last known target in base",
+                )
+                target_x = self.current_target_x
+                target_y = self.current_target_y
+            else:
+                target_x = float(point_in_base.point.x)
+                target_y = float(point_in_base.point.y)
+                self.current_target_x = target_x
+                self.current_target_y = target_y
         
         # В base_link робот находится в (0, 0), поэтому вектор к цели = координаты цели
         dx_local = target_x
@@ -463,8 +507,8 @@ class PolicyInferenceNode:
                 rate.sleep()
                 continue
             
-            if self.last_odom is None:
-                rospy.logwarn_throttle(1.0, "No odom data received")
+            if self.last_high_state is None:
+                rospy.logwarn_throttle(1.0, "No high_state data received")
                 rate.sleep()
                 continue
             
@@ -477,8 +521,8 @@ class PolicyInferenceNode:
             try:
                 lidar_sectors = self.last_lidar_sectors
                 
-                # Получаем угловую скорость w
-                angular_vel = self.last_odom.twist.twist.angular.z
+                # Угловая скорость из HighState (unitree_legged_msgs)
+                angular_vel = self.last_high_state.rotateSpeed
                 
                 # Получаем информацию о цели
                 distance, sin_angle, cos_angle = self.get_target_info()
@@ -498,6 +542,9 @@ class PolicyInferenceNode:
                     cos_angle,
                     prev_action
                 )
+                print("distance", distance)
+                print("sin_angle", sin_angle)
+                print("cos_angle", cos_angle)
 
                 vx = float(scaled_action[0]) * 0.3
                 vy = float(scaled_action[1]) * 0.3
@@ -517,7 +564,7 @@ class PolicyInferenceNode:
                     # cmd.bandWidth = 0
                     cmd.mode = 2  # velocity walking
                     cmd.forwardSpeed = vx
-                    cmd.sideSpeed = vy
+                    cmd.sideSpeed = vy + 0.1
                     cmd.rotateSpeed = w
                     cmd.bodyHeight = 0.0
                     cmd.footRaiseHeight = 0.0

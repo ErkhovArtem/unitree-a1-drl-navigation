@@ -10,7 +10,7 @@
   <arg name="config_path" default="$(arg dog_lplanner_dir)/config/a1_ros1.yaml" />
   <arg name="model_path" default="$(arg dog_lplanner_dir)/sac_actor.onnx" />
   <arg name="scan_topic" default="/scan" />
-  <arg name="odom_topic" default="/odom" />
+  <arg name="high_state_topic" default="/high_state" />
   <arg name="clicked_point_topic" default="/clicked_point" />
   <!-- Policy output: directly to /high_cmd -->
   <arg name="high_cmd_topic" default="/high_cmd" />
@@ -39,7 +39,7 @@
     <param name="config_path" value="$(arg config_path)" />
     <param name="model_path" value="$(arg model_path)" />
     <param name="scan_topic" value="$(arg scan_topic)" />
-    <param name="odom_topic" value="$(arg odom_topic)" />
+    <param name="high_state_topic" value="$(arg high_state_topic)" />
     <param name="clicked_point_topic" value="$(arg clicked_point_topic)" />
     <param name="high_cmd_topic" value="$(arg high_cmd_topic)" />
     <param name="map_frame" value="$(arg map_frame)" />

@@ -150,7 +150,7 @@ rosrun dog_lplanner policy_gui.py
 - `max_lidar_range`: Максимальная дальность лидара (м)
 - `min_lidar_range`: Минимальная дальность (м)
 - `num_sectors`: Количество секторов (40)
-- Топики: `/scan`, `/odom`, `/clicked_point`, `/high_cmd`
+- Топики: `/scan`, `/high_state`, `/clicked_point`, `/high_cmd`
 
 ## Визуализация
 
@@ -184,6 +184,13 @@ pip3 list | grep -E "numpy|onnxruntime|yaml|rospkg"
 # Проверьте что tf публикуется
 rostopic echo /tf
 # Должны быть трансформации между map и base_link
+```
+
+### Не публикуются сообщения в топики `/policy_inference/lidar_sectors_viz`, /policy_inference/cmd_viz, `/high_cmd`:
+
+```bash
+# В контейнере выполнить:
+export ROS_IP=<IP машины где запущен контейнер, в сети робота>
 ```
 
 ## Примечания
