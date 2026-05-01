@@ -3,8 +3,7 @@
 """
 ROS1 обработчик LaserScan для конвертации в 40 секторов для политики.
 
-Адаптировано из lidar_2d_processor.py для работы с sensor_msgs/LaserScan.
-Логика полностью совместима с process_lidar_to_sectors из train.py.
+Логика совместима с process_lidar_to_sectors из пайплайна обучения (см. POLICY_SPEC_FOR_AGENTS.txt).
 """
 
 import numpy as np
@@ -15,7 +14,7 @@ class LidarProcessorROS1:
     """
     Обработчик LaserScan для конвертации в 40 секторов.
     
-    Логика идентична lidar_2d_processor.py:
+    Секторизация как в обучении:
     - 40 секторов [-π, π]
     - Фильтрация по min_range/max_range
     - Минимум по сектору

@@ -34,7 +34,6 @@ catkin_install_python(PROGRAMS
   scripts/inference_onnx.py
   scripts/lidar_processor_ros1.py
   scripts/lidar_sectors_node.py
-  scripts/high_cmd_safe_node.py
   scripts/tf_tree_ros1.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

@@ -4,7 +4,7 @@
 ONNX Inference Script for SAC Actor Policy
 
 This script loads an ONNX model and performs inference for robot control.
-Designed to work with lidar_2d_processor.py output.
+Ожидает на вход вектор из 40 дистанций по секторам (метры), как после LidarProcessorROS1.
 Параметры берутся из configs/a1.yaml (cmd_scale, history_length, max_lidar_range и т.д.).
 
 Usage:

@@ -6,21 +6,25 @@ ROS1 пакет для инференса политики SAC Actor на роб
 
 ```
 dog_lplanner/
-├── CMakeLists.txt          # Конфигурация сборки
-├── package.xml             # Описание пакета
-├── scripts/                # Python скрипты (исполняемые)
+├── CMakeLists.txt
+├── package.xml
+├── POLICY_SPEC_FOR_AGENTS.txt   # Спека формата наблюдений / лидара
+├── scripts/
 │   ├── policy_inference_ros1.py  # Основная нода инференса
-│   ├── policy_gui.py              # GUI для управления
-│   ├── lidar_processor_ros1.py    # Обработка LaserScan
-│   ├── inference_onnx.py          # Класс инференса ONNX
-│   ├── export_to_onnx.py          # Экспорт модели в ONNX
-│   └── lidar_2d_processor.py      # ROS2 версия (для справки)
-├── launch/                 # Launch файлы
-│   └── policy_inference.launch
-├── config/                 # Конфигурационные файлы
-│   └── a1_ros1.yaml
-├── sac_actor.onnx          # ONNX модель политики
-└── README.md               # Этот файл
+│   ├── policy_gui.py
+│   ├── lidar_processor_ros1.py   # LaserScan → 40 секторов (м)
+│   ├── lidar_sectors_node.py     # Опционально: отдельная нода /scan → /lidar_sectors (см. lidar_sectors.launch)
+│   ├── inference_onnx.py
+│   ├── export_to_onnx.py         # Офлайн: экспорт .pth → .onnx
+│   └── tf_tree_ros1.py           # TF из /tf (Python3 без tf2_py)
+├── launch/
+│   ├── policy_inference.launch
+│   └── lidar_sectors.launch
+├── config/
+│   ├── a1_ros1.yaml
+│   └── policy_visualization.rviz
+├── sac_actor.onnx
+└── README.md
 ```
 
 ## Зависимости
@@ -44,8 +48,8 @@ dog_lplanner/
 # В контейнере
 cd /root/catkin_ws
 source /opt/ros/melodic/setup.bash
-catkin_make
-source /root/catkin_ws/devel/setup.bash
+catkin_make install
+source /root/catkin_ws/install/setup.bash
 ```
 
 ## Использование
@@ -53,81 +57,61 @@ source /root/catkin_ws/devel/setup.bash
 1. **Запустите ноду инференса и GUI**
 
    ```bash
-   # В контейнере, после source devel/setup.bash
    roslaunch dog_lplanner policy_inference.launch
    ```
 
 2. **В RViz:**
-   - Подпишитесь на топик `/lidar_sectors_viz` для визуализации секторов лидара
-   - Используйте инструмент "Publish Point" (2D Nav Goal) для установки целевой точки
-   - Точка будет опубликована в `/clicked_point` (фрейм `map`)
+   - Визуализация секторов лидара: топик **`/policy_inference/lidar_viz`** (MarkerArray, по умолчанию; параметр `~lidar_viz_topic`)
+   - Вектор команды политики: **`/policy_inference/cmd_viz`**
+   - Инструмент "Publish Point" → **`/clicked_point`** (фрейм задаётся Fixed Frame в RViz; нода нормализует цель в `map`)
 
-3. **В GUI:**
-   - Нажмите "START" для запуска политики
-   - Нажмите "STOP" для остановки (робот остановится)
+3. **В GUI:** START / STOP политики (`/policy_running`).
 
-4. **Проверка работы:**
+4. **Проверка:**
+
    ```bash
-   # Проверьте публикацию команд
    rostopic echo /high_cmd
-   
-   # Проверьте визуализацию лидара
-   rostopic echo /lidar_sectors_viz
+   rostopic echo /policy_inference/lidar_viz
    ```
 
 ## Параметры
 
-Основные параметры настраиваются в `config/a1_ros1.yaml`:
+Основные параметры в `config/a1_ros1.yaml`:
 
-- `cmd_scale`: Масштаб команд [vx, vy, w]
-- `max_lidar_range`: Максимальная дальность лидара (м)
-- `min_lidar_range`: Минимальная дальность (м)
-- `num_sectors`: Количество секторов (40)
+- `cmd_scale`, `max_lidar_range`, `min_lidar_range`, `num_sectors`, `goal_reached_distance`
 - Топики: `/scan`, `/high_state`, `/clicked_point`, `/high_cmd`
 
-## Визуализация
+## Визуализация (policy_inference)
 
-Нода публикует MarkerArray в топик `/lidar_sectors_viz`:
-- **Стрелки** показывают направление и расстояние до препятствий по секторам
-- **Лейблы** показывают номер сектора (0-39) и угол в радианах
-
-Цвет стрелок:
-- **Красный** = близко (препятствие)
-- **Зеленый** = далеко (свободно)
+- **`/policy_inference/lidar_viz`**: стрелки по секторам лидара, лейблы с индексом и углом
+- **`/policy_inference/cmd_viz`**: стрелка скорости (vx, vy) в `cmd_viz_frame` (по умолчанию `base_link`)
 
 ## Troubleshooting
 
 ### Пакет не найден
-```bash
-# Убедитесь что workspace засорсен
-source /root/catkin_ws/devel/setup.bash
 
-# Проверьте что пакет в src/
+```bash
+source /root/catkin_ws/install/setup.bash
 rospack find dog_lplanner
 ```
 
 ### Ошибки импорта
+
 ```bash
-# Убедитесь что все зависимости установлены
 pip3 list | grep -E "numpy|onnxruntime|yaml|rospkg"
 ```
 
-### TF ошибки
+### TF
+
 ```bash
-# Проверьте что tf публикуется
 rostopic echo /tf
-# Должны быть трансформации между map и base_link
 ```
 
-### Не публикуются сообщения в топики `/policy_inference/lidar_sectors_viz`, /policy_inference/cmd_viz, `/high_cmd`:
+### Нет сообщений на `/policy_inference/lidar_viz`, `/policy_inference/cmd_viz`, `/high_cmd`
 
-```bash
-# В контейнере выполнить:
-export ROS_IP=<IP машины где запущен контейнер, в сети робота>
-```
+Проверьте `ROS_IP` / сеть (в Docker см. `docker/ros_detect_ip.sh` и `docker/README.md`).
 
 ## Примечания
 
-- Модель `sac_actor.onnx` должна быть в корне пакета
-- Конфиг `a1_ros1.yaml` должен быть в `config/`
-- Все Python скрипты должны быть исполняемыми (`chmod +x`)
+- Модель `sac_actor.onnx` в корне пакета (опционально при `catkin_make install`)
+- Скрипты в `scripts/` должны быть исполняемыми (`chmod +x`)

@@ -1,9 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-  <!-- 
-    Launch файл для запуска инференса политики.
-    Примечание: Если dog_lplanner не является ROS пакетом, используйте run_policy.sh
-  -->
+  <!-- Launch: policy_inference + policy_gui + опционально rviz -->
   
   <!-- Параметры -->
   <arg name="dog_lplanner_dir" default="$(find dog_lplanner)" />
