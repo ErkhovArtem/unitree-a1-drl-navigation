@@ -84,6 +84,7 @@ class PolicyInferenceNode:
         self.high_cmd_topic = rospy.get_param('~high_cmd_topic', '/high_cmd')
         self.lidar_viz_topic = rospy.get_param('~lidar_viz_topic', '/policy_inference/lidar_viz')
         self.cmd_viz_topic = rospy.get_param('~cmd_viz_topic', '/policy_inference/cmd_viz')
+        self.goal_viz_topic = rospy.get_param('~goal_viz_topic', '/policy_inference/goal_marker')
         self.cmd_viz_frame = rospy.get_param('~cmd_viz_frame', 'base_link')
         self.cmd_viz_scale = float(rospy.get_param('~cmd_viz_scale', 1.0))  # meters per (m/s)
         
@@ -184,6 +185,14 @@ class PolicyInferenceNode:
             MarkerArray,
             queue_size=1
         )
+
+        # Маркер выбранной в RViz цели (RViz Publish Point сам по себе ничего не рисует)
+        self.goal_viz_pub = rospy.Publisher(
+            self.goal_viz_topic,
+            MarkerArray,
+            queue_size=1,
+            latch=True,
+        )
         
         # Инициализируем ROS параметр для состояния
         if not rospy.has_param('/policy_running'):
@@ -200,6 +209,7 @@ class PolicyInferenceNode:
         rospy.loginfo(f"  Clicked point topic: {self.clicked_point_topic}")
         rospy.loginfo(f"  HighCmd topic: {self.high_cmd_topic}")
         rospy.loginfo(f"  Cmd viz topic: {self.cmd_viz_topic} (frame: {self.cmd_viz_frame})")
+        rospy.loginfo(f"  Goal viz topic: {self.goal_viz_topic}")
         rospy.loginfo(f"  Map frame: {self.map_frame}, Base frame: {self.base_frame}")
         rospy.loginfo(f"  Inference rate: {self.inference_rate} Hz")
         rospy.loginfo(
@@ -271,7 +281,55 @@ class PolicyInferenceNode:
         ma.markers.append(t)
 
         self.cmd_viz_pub.publish(ma)
-        
+
+    def publish_goal_marker(self):
+        """Постоянный маркер цели в RViz (в goal_source_frame, те же координаты, что и для политики)."""
+        ma = MarkerArray()
+        stamp = rospy.Time.now()
+
+        sphere = Marker()
+        sphere.header.frame_id = self.goal_source_frame
+        sphere.header.stamp = stamp
+        sphere.ns = "clicked_goal"
+        sphere.id = 0
+        sphere.type = Marker.SPHERE
+        sphere.action = Marker.ADD
+        sphere.pose.position.x = self.goal_point_x
+        sphere.pose.position.y = self.goal_point_y
+        sphere.pose.position.z = self.goal_point_z
+        sphere.pose.orientation.w = 1.0
+        sphere.scale.x = 0.18
+        sphere.scale.y = 0.18
+        sphere.scale.z = 0.18
+        sphere.color.r = 0.15
+        sphere.color.g = 0.85
+        sphere.color.b = 1.0
+        sphere.color.a = 0.95
+        sphere.lifetime = rospy.Duration(0)
+        ma.markers.append(sphere)
+
+        label = Marker()
+        label.header.frame_id = self.goal_source_frame
+        label.header.stamp = stamp
+        label.ns = "clicked_goal"
+        label.id = 1
+        label.type = Marker.TEXT_VIEW_FACING
+        label.action = Marker.ADD
+        label.pose.position.x = self.goal_point_x
+        label.pose.position.y = self.goal_point_y
+        label.pose.position.z = self.goal_point_z + 0.28
+        label.pose.orientation.w = 1.0
+        label.scale.z = 0.2
+        label.color.r = 1.0
+        label.color.g = 1.0
+        label.color.b = 1.0
+        label.color.a = 1.0
+        label.text = "Goal"
+        label.lifetime = rospy.Duration(0)
+        ma.markers.append(label)
+
+        self.goal_viz_pub.publish(ma)
+
     def scan_callback(self, msg):
         """Callback для LaserScan."""
         self.last_lidar_scan = msg
@@ -345,7 +403,9 @@ class PolicyInferenceNode:
                 f"Goal in '{self.goal_source_frame}' ({self.goal_point_x:.2f}, {self.goal_point_y:.2f}); "
                 f"waiting for TF {self.goal_source_frame} -> {self.base_frame}",
             )
-    
+
+        self.publish_goal_marker()
+
     def publish_lidar_visualization(self, lidar_sectors):
         """
         Публикует MarkerArray с визуализацией секторов лидара.
