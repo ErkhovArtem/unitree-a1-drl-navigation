@@ -3,9 +3,9 @@
 """
 ONNX Inference Script for SAC Actor Policy
 
-This script loads an ONNX model and performs inference for robot control.
-Ожидает на вход вектор из 40 дистанций по секторам (метры), как после LidarProcessorROS1.
-Параметры берутся из configs/a1.yaml (cmd_scale, history_length, max_lidar_range и т.д.).
+This script loads an ONNX model and runs inference for robot control.
+Expects 40 sector ranges in meters (same layout as LidarProcessorROS1).
+Config keys follow ``configs/a1.yaml`` (cmd_scale, history_length, max_lidar_range, etc.).
 
 Usage:
     python scripts/inference_onnx.py --model_path sac_actor.onnx --config_path configs/a1.yaml
@@ -44,23 +44,17 @@ class SACInference:
         """
         import onnxruntime as ort
         
-        # Load config (соответствие configs/a1.yaml)
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
         
         self.config = config
         sac_config = config.get('sac', {})
         
-        # cmd_scale из a1.yaml: [vx, vy, w] — масштаб выходных команд
         self.cmd_scale = config.get('cmd_scale', [0.8, 0.4, 0.35])
-        # Нормализация наблюдений (как в train.py / observation.py)
         self.max_lidar_range = config.get('max_lidar_range') or sac_config.get('max_lidar_range') or 3.0
-        # max_angular_vel = cmd_scale[2] в train (a1.yaml); для норм. угловой скорости
         self.max_angular_vel = config.get('max_angular_vel', self.cmd_scale[2])
-        # max_distance: диагональ комнаты ~10.75 (ROOM ±3.8)
         self.max_distance = config.get('max_distance', 10.75)
-        
-        # history_length из a1.yaml sac.history_length
+
         if history_length is None:
             history_length = sac_config.get('history_length', 0)
         self.history_length = history_length
@@ -271,7 +265,6 @@ def main():
                         help='Action history length (None = auto-detect from model/config)')
     args = parser.parse_args()
     
-    # Разрешаем пути относительно PROJECT_ROOT (как в export_to_onnx / train)
     config_candidates = [
         args.config_path,
         Path.cwd() / args.config_path,

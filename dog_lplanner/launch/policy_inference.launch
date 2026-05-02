@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <launch>
-  <!-- Launch: policy_inference + policy_gui + опционально rviz -->
+  <!-- policy_inference + policy_gui + optional RViz -->
   
-  <!-- Параметры -->
+  <!-- Args -->
   <arg name="dog_lplanner_dir" default="$(find dog_lplanner)" />
   <arg name="config_path" default="$(arg dog_lplanner_dir)/config/a1_ros1.yaml" />
   <arg name="model_path" default="$(arg dog_lplanner_dir)/sac_actor.onnx" />
@@ -28,7 +28,7 @@
   <arg name="use_rviz" default="true" />
   <arg name="rviz_config" default="$(arg dog_lplanner_dir)/config/policy_visualization.rviz" />
   
-  <!-- Нода инференса политики -->
+  <!-- Policy inference node -->
   <node 
     name="policy_inference" 
     pkg="dog_lplanner" 
@@ -53,7 +53,7 @@
     <param name="goal_viz_topic" value="$(arg goal_viz_topic)" />
   </node>
   
-  <!-- GUI для управления -->
+  <!-- Control GUI -->
   <node 
     name="policy_gui" 
     pkg="dog_lplanner" 
@@ -62,7 +62,7 @@
     respawn="false">
   </node>
   
-  <!-- RViz (опционально) -->
+  <!-- RViz (optional) -->
   <node if="$(arg use_rviz)"
     name="rviz" 
     pkg="rviz" 

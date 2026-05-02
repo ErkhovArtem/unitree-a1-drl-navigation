@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ROS1 нода для инференса политики SAC Actor.
+ROS1 node: SAC Actor policy inference for Unitree A1.
 
-Подписывается на:
-- /scan (sensor_msgs/LaserScan) - данные лидара
-- /high_state (unitree_legged_msgs/HighState) - угловая скорость rotateSpeed
-- /clicked_point (geometry_msgs/PointStamped) - цель из RViz; нода переводит точку в map_frame (~map)
+Subscribes:
+  /scan (LaserScan), /high_state (HighState, w from rotateSpeed),
+  /clicked_point (PointStamped goal; transformed to map when TF allows).
 
-Публикует:
-- /high_cmd (unitree_legged_msgs/HighCmd) - команды управления
+Publishes:
+  /high_cmd (HighCmd) when /policy_safe_mode is false.
 
-Управление состоянием через ROS параметр /policy_running (bool).
-Безопасный режим через /policy_safe_mode (bool): команды на робота НЕ отправляются,
-но визуализация скорости в RViz публикуется.
+/policy_running gates the inference loop. Safe mode still publishes RViz markers.
 """
 
 import rospy
@@ -21,66 +18,54 @@ import numpy as np
 import yaml
 from pathlib import Path
 from collections import deque
-from typing import Optional
-
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import PointStamped, Point
 from visualization_msgs.msg import Marker, MarkerArray
 from unitree_legged_msgs.msg import HighCmd, HighState, LED
 
-# Импортируем классы для инференса
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 from inference_onnx import SACInference
 from lidar_processor_ros1 import LidarProcessorROS1
 from tf_tree_ros1 import TFGraph
 
-# Для ROS пакета используем rospkg для поиска файлов
 try:
     import rospkg
     rospack = rospkg.RosPack()
     ROSPKG_AVAILABLE = True
-except:
+except Exception:
     ROSPKG_AVAILABLE = False
 
 
 class PolicyInferenceNode:
-    """ROS1 нода для инференса политики."""
-    
+    """SAC policy inference ROS node."""
+
     def __init__(self):
-        """Инициализация ноды."""
         rospy.init_node('policy_inference', anonymous=True)
-        
-        # Параметры из ROS параметров или конфига
-        # Пытаемся найти пакет через rospkg
+
         if ROSPKG_AVAILABLE:
             try:
                 pkg_path = rospack.get_path('dog_lplanner')
                 default_config = str(Path(pkg_path) / 'config' / 'a1_ros1.yaml')
                 default_model = str(Path(pkg_path) / 'sac_actor.onnx')
-            except:
-                # Fallback на относительные пути
+            except Exception:
                 default_config = str(Path(__file__).parent.parent / 'config' / 'a1_ros1.yaml')
                 default_model = str(Path(__file__).parent.parent / 'sac_actor.onnx')
         else:
-            # Fallback на относительные пути
             default_config = str(Path(__file__).parent.parent / 'config' / 'a1_ros1.yaml')
             default_model = str(Path(__file__).parent.parent / 'sac_actor.onnx')
-        
+
         config_path = rospy.get_param('~config_path', default_config)
         model_path = rospy.get_param('~model_path', default_model)
-        
-        # Если пути относительные, делаем их абсолютными относительно директории скрипта
+
         if not Path(config_path).is_absolute():
             config_path = str(Path(__file__).parent / config_path)
         if not Path(model_path).is_absolute():
             model_path = str(Path(__file__).parent / model_path)
-        
-        # Топики
+
         self.scan_topic = rospy.get_param('~scan_topic', '/scan')
         self.high_state_topic = rospy.get_param('~high_state_topic', '/high_state')
         self.clicked_point_topic = rospy.get_param('~clicked_point_topic', '/clicked_point')
-        # Публикуем напрямую в /high_cmd (безопасность через /policy_safe_mode)
         self.high_cmd_topic = rospy.get_param('~high_cmd_topic', '/high_cmd')
         self.lidar_viz_topic = rospy.get_param('~lidar_viz_topic', '/policy_inference/lidar_viz')
         self.cmd_viz_topic = rospy.get_param('~cmd_viz_topic', '/policy_inference/cmd_viz')
@@ -88,22 +73,18 @@ class PolicyInferenceNode:
         self.cmd_viz_frame = rospy.get_param('~cmd_viz_frame', 'base_link')
         self.cmd_viz_scale = float(rospy.get_param('~cmd_viz_scale', 1.0))  # meters per (m/s)
         
-        # Фреймы для tf (из параметров или конфига)
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
-        
+
         self.map_frame = rospy.get_param('~map_frame', config.get('map_frame', 'map'))
         self.base_frame = rospy.get_param('~base_frame', config.get('base_frame', 'base_link'))
-        
-        # TF graph (python-only) for Python3 compatibility on ROS Melodic
+
         self.tf_graph = TFGraph()
-        
-        # Параметры цели (fallback, если нет clicked_point)
+
         self.target_x = rospy.get_param('~target_x', 5.0)
         self.target_y = rospy.get_param('~target_y', 0.0)
-        
-        # Частота инференса
-        self.inference_rate = rospy.get_param('~inference_rate', 10.0)  # 10 Hz
+
+        self.inference_rate = rospy.get_param('~inference_rate', 10.0)
         self.goal_reached_distance = float(
             rospy.get_param(
                 '~goal_reached_distance',
@@ -111,7 +92,6 @@ class PolicyInferenceNode:
             )
         )
 
-        # Параметры лидара из конфига (config уже загружен выше)
         min_range = config.get('min_lidar_range', 0.25)
         max_range = config.get('max_lidar_range', 3.0)
         num_sectors = config.get('num_sectors', 40)
@@ -122,27 +102,24 @@ class PolicyInferenceNode:
             num_sectors=num_sectors
         )
         
-        # Инициализируем инференс
         if not Path(model_path).exists():
             rospy.logerr(f"Model file not found: {model_path}")
             raise FileNotFoundError(f"Model file not found: {model_path}")
         
         self.inference = SACInference(model_path, config_path)
         
-        # Кэш данных
         self.last_lidar_scan = None
         self.last_lidar_sectors = None
         self.last_high_state = None
         self.current_target_x = self.target_x
         self.current_target_y = self.target_y
-        self.target_received = False  # Флаг получения цели из clicked_point
-        # Цель из RViz: после клика храним в map_frame (~map), в base пересчитываем каждый тик
+        self.target_received = False
+        # Goal pose is stored in goal_source_frame (map when TF works); recomputed to base each tick.
         self.goal_source_frame = self.map_frame.strip("/")
         self.goal_point_x = 0.0
         self.goal_point_y = 0.0
         self.goal_point_z = 0.0
         
-        # Подписки
         self.scan_sub = rospy.Subscriber(
             self.scan_topic,
             LaserScan,
@@ -157,7 +134,6 @@ class PolicyInferenceNode:
             queue_size=1
         )
         
-        # Подписка на clicked_point из RViz
         self.clicked_point_sub = rospy.Subscriber(
             self.clicked_point_topic,
             PointStamped,
@@ -165,28 +141,25 @@ class PolicyInferenceNode:
             queue_size=1
         )
         
-        # Публикатор команд
         self.cmd_pub = rospy.Publisher(
             self.high_cmd_topic,
             HighCmd,
             queue_size=1
         )
 
-        # Публикатор визуализации "команды скорости" (вектор политики)
         self.cmd_viz_pub = rospy.Publisher(
             self.cmd_viz_topic,
             MarkerArray,
             queue_size=1
         )
         
-        # Публикатор визуализации лидара
         self.lidar_viz_pub = rospy.Publisher(
             self.lidar_viz_topic,
             MarkerArray,
             queue_size=1
         )
 
-        # Маркер выбранной в RViz цели (RViz Publish Point сам по себе ничего не рисует)
+        # Goal marker (Publish Point does not draw geometry by itself)
         self.goal_viz_pub = rospy.Publisher(
             self.goal_viz_topic,
             MarkerArray,
@@ -194,7 +167,6 @@ class PolicyInferenceNode:
             latch=True,
         )
         
-        # Инициализируем ROS параметр для состояния
         if not rospy.has_param('/policy_running'):
             rospy.set_param('/policy_running', False)
         if not rospy.has_param('/policy_safe_mode'):
@@ -217,10 +189,9 @@ class PolicyInferenceNode:
         )
 
     def publish_cmd_visualization(self, vx: float, vy: float, w: float, safe_mode: bool):
-        """Публикует в RViz вектор скорости (vx, vy) + подпись."""
+        """Publish velocity arrow and HUD text in cmd_viz_frame."""
         ma = MarkerArray()
 
-        # Arrow (скорость в плоскости)
         m = Marker()
         m.header.frame_id = self.cmd_viz_frame
         m.header.stamp = rospy.Time.now()
@@ -283,7 +254,7 @@ class PolicyInferenceNode:
         self.cmd_viz_pub.publish(ma)
 
     def publish_goal_marker(self):
-        """Постоянный маркер цели в RViz (в goal_source_frame, те же координаты, что и для политики)."""
+        """Publish persistent goal sphere + label in goal_source_frame."""
         ma = MarkerArray()
         stamp = rospy.Time.now()
 
@@ -331,10 +302,7 @@ class PolicyInferenceNode:
         self.goal_viz_pub.publish(ma)
 
     def scan_callback(self, msg):
-        """Callback для LaserScan."""
         self.last_lidar_scan = msg
-        # Всегда обрабатываем и публикуем визуализацию по факту прихода лидара,
-        # независимо от /policy_running (чтобы стрелки были всегда).
         try:
             sectors = self.lidar_processor.process_laser_scan_to_sectors(msg)
             self.last_lidar_sectors = sectors
@@ -343,15 +311,10 @@ class PolicyInferenceNode:
             rospy.logwarn_throttle(1.0, f"Lidar processing/viz failed: {e}")
     
     def high_state_callback(self, msg):
-        """Callback для HighState: сохраняем состояние, angular_vel берём из rotateSpeed."""
         self.last_high_state = msg
-    
-    def clicked_point_callback(self, msg):
-        """Callback для clicked_point из RViz.
 
-        RViz кладёт в header.frame_id текущий Fixed Frame; чтобы цель не ломалась при его смене,
-        переводим точку в map_frame и сохраняем только координаты в карте.
-        """
+    def clicked_point_callback(self, msg):
+        """Store goal in map (when TF allows) so changing RViz Fixed Frame does not break the target."""
         src = msg.header.frame_id.strip("/")
         map_id = self.map_frame.strip("/")
         point_in_map = self.tf_graph.transform_point(map_id, msg)
@@ -407,13 +370,7 @@ class PolicyInferenceNode:
         self.publish_goal_marker()
 
     def publish_lidar_visualization(self, lidar_sectors):
-        """
-        Публикует MarkerArray с визуализацией секторов лидара.
-        Каждый луч имеет стрелку и лейбл с номером и углом.
-        
-        Args:
-            lidar_sectors: numpy array [40] с дистанциями по секторам (метры)
-        """
+        """MarkerArray: one arrow + text label per sector (see lidar_processor_ros1 sector convention)."""
         if self.last_lidar_scan is None:
             return
         
@@ -422,14 +379,9 @@ class PolicyInferenceNode:
         sector_angle = 2 * np.pi / num_sectors
         
         for sector_idx in range(num_sectors):
-            # Конвенция секторов (см. lidar_processor_ros1.py):
-            # - sector 0 смотрит вперёд (0 рад)
-            # - индексы возрастают по часовой стрелке
             angle_center = -float(sector_idx) * float(sector_angle)
-            
             distance = float(lidar_sectors[sector_idx])
-            
-            # Создаем маркер-стрелку
+
             marker = Marker()
             marker.header.frame_id = self.last_lidar_scan.header.frame_id
             marker.header.stamp = rospy.Time.now()
@@ -438,29 +390,20 @@ class PolicyInferenceNode:
             marker.type = Marker.ARROW
             marker.action = Marker.ADD
             
-            # Начальная точка (центр)
             start_point = Point()
             start_point.x = 0.0
             start_point.y = 0.0
             start_point.z = 0.0
             
-            # Конечная точка (на расстоянии distance)
             end_point = Point()
             end_point.x = float(distance * np.cos(angle_center))
             end_point.y = float(distance * np.sin(angle_center))
             end_point.z = 0.0
 
-            # if sector_idx>=20 and sector_idx<=22:
-                # print(f"Id: {sector_idx}, x: {end_point.x}, y: {end_point.y}")
-            
             marker.points = [start_point, end_point]
-            
-            # Размеры стрелки
-            marker.scale.x = 0.05  # толщина
-            marker.scale.y = 0.1   # ширина головки
-            marker.scale.z = 0.1  # высота головки
-            
-            # Цвет (от красного близко к зеленому далеко)
+            marker.scale.x = 0.05
+            marker.scale.y = 0.1
+            marker.scale.z = 0.1
             ratio = distance / self.lidar_processor.max_range
             marker.color.r = float(1.0 - ratio)
             marker.color.g = float(ratio)
@@ -470,7 +413,6 @@ class PolicyInferenceNode:
             marker.lifetime = rospy.Duration(0.2)
             marker_array.markers.append(marker)
             
-            # Создаем лейбл с номером и углом
             label_marker = Marker()
             label_marker.header.frame_id = self.last_lidar_scan.header.frame_id
             label_marker.header.stamp = rospy.Time.now()
@@ -479,20 +421,15 @@ class PolicyInferenceNode:
             label_marker.type = Marker.TEXT_VIEW_FACING
             label_marker.action = Marker.ADD
             
-            # Позиция лейбла (немного дальше конца стрелки)
             label_offset = 0.2
             label_marker.pose.position.x = float((distance + label_offset) * np.cos(angle_center))
             label_marker.pose.position.y = float((distance + label_offset) * np.sin(angle_center))
             label_marker.pose.position.z = 0.1
             
-            # Текст лейбла: номер и угол центра сектора (рад)
             label_angle = angle_center
             label_marker.text = f"{sector_idx}\n{label_angle:.3f}"
             
-            # Размер текста
             label_marker.scale.z = 0.15
-            
-            # Цвет текста
             label_marker.color.r = 1.0
             label_marker.color.g = 1.0
             label_marker.color.b = 1.0
@@ -504,15 +441,7 @@ class PolicyInferenceNode:
         self.lidar_viz_pub.publish(marker_array)
     
     def get_target_info(self):
-        """
-        Вычисляет информацию о цели в локальной системе робота (base_link).
-
-        Если цель задана через clicked_point, она хранится в map_frame (см. clicked_point_callback);
-        на каждом вызове — пересчёт в base_frame по TF, пока робот движется.
-
-        Returns:
-            (distance, sin_angle, cos_angle)
-        """
+        """Goal in base_link: (distance, sin(angle), cos(angle))."""
         if not self.target_received:
             target_x = self.target_x
             target_y = self.target_y
@@ -538,14 +467,9 @@ class PolicyInferenceNode:
                 self.current_target_x = target_x
                 self.current_target_y = target_y
         
-        # В base_link робот находится в (0, 0), поэтому вектор к цели = координаты цели
         dx_local = target_x
         dy_local = target_y
-        
-        # Расстояние до цели
         distance = np.sqrt(dx_local**2 + dy_local**2)
-        
-        # Угол к цели
         if distance < 1e-6:
             sin_angle = 0.0
             cos_angle = 1.0
@@ -556,21 +480,17 @@ class PolicyInferenceNode:
         return distance, sin_angle, cos_angle
     
     def run_inference_loop(self):
-        """Основной цикл инференса."""
         rate = rospy.Rate(self.inference_rate)
-        
+
         while not rospy.is_shutdown():
-            # Проверяем состояние (старт/стоп)
             is_running = rospy.get_param('/policy_running', False)
             safe_mode = rospy.get_param('/policy_safe_mode', True)
-            
+
             if not is_running:
-                # В режиме стоп: показываем нулевой вектор; на робота не шлём если safe_mode=ON
                 self.publish_cmd_visualization(0.0, 0.0, 0.0, bool(safe_mode))
                 rate.sleep()
                 continue
             
-            # Проверяем наличие данных
             if self.last_lidar_sectors is None:
                 rospy.logwarn_throttle(1.0, "No lidar data received")
                 rate.sleep()
@@ -581,7 +501,6 @@ class PolicyInferenceNode:
                 rate.sleep()
                 continue
             
-            # Проверяем наличие цели (предупреждение только если никогда не получали)
             if not self.target_received:
                 rospy.logwarn_throttle(5.0, 
                     f"No target received. Click a point in RViz on topic {self.clicked_point_topic} "
@@ -590,10 +509,7 @@ class PolicyInferenceNode:
             try:
                 lidar_sectors = self.last_lidar_sectors
                 
-                # Угловая скорость из HighState (unitree_legged_msgs)
                 angular_vel = self.last_high_state.rotateSpeed
-                
-                # Получаем информацию о цели
                 distance, sin_angle, cos_angle = self.get_target_info()
 
                 if distance <= self.goal_reached_distance:
@@ -605,13 +521,10 @@ class PolicyInferenceNode:
                     rate.sleep()
                     continue
 
-                # Получаем предыдущее действие (если есть)
                 prev_action = None
                 if self.inference.action_history is not None and len(self.inference.action_history) > 0:
-                    # Берем последнее действие из истории
                     prev_action = list(self.inference.action_history)[-1]
-                
-                # Выполняем инференс
+
                 raw_action, scaled_action = self.inference.predict(
                     lidar_sectors,
                     angular_vel,
@@ -620,18 +533,13 @@ class PolicyInferenceNode:
                     cos_angle,
                     prev_action
                 )
-                print("distance", distance)
-                print("sin_angle", sin_angle)
-                print("cos_angle", cos_angle)
 
                 vx = float(scaled_action[0]) * 0.3
                 vy = float(scaled_action[1]) * 0.3
                 w = float(scaled_action[2]) * 0.3
 
-                # Всегда показываем вектор скорости в RViz
                 self.publish_cmd_visualization(vx, vy, w, bool(safe_mode))
-                
-                # Команды на робота: только если safe_mode=OFF
+
                 if not bool(safe_mode):
                     cmd = HighCmd()
                     # A1/Aliengo format
@@ -650,7 +558,6 @@ class PolicyInferenceNode:
                     cmd.yaw = 0.0
                     cmd.pitch = 0.0
                     cmd.roll = 0.0
-                        # LED array (4 LEDs)
                     cmd.led = [LED() for _ in range(4)]
                     for i in range(4):
                         cmd.led[i].r = 0
@@ -676,7 +583,6 @@ class PolicyInferenceNode:
 
 
 def main():
-    """Главная функция."""
     try:
         node = PolicyInferenceNode()
         node.run_inference_loop()

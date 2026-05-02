@@ -1,13 +1,13 @@
 <?xml version="1.0"?>
 <launch>
-  <!-- Отдельная нода для обработки лидара: /scan -> /lidar_sectors (+ viz) -->
+  <!-- Standalone node: /scan -> sector array (+ optional markers) -->
 
   <arg name="scan_topic" default="/scan" />
   <arg name="sectors_topic" default="/lidar_sectors" />
   <arg name="publish_viz" default="true" />
   <arg name="lidar_viz_topic" default="/lidar_sectors/viz" />
 
-  <!-- Можно указать config_path (a1_ros1.yaml), либо задать min/max/num напрямую -->
+  <!-- Optional config_path (a1_ros1.yaml); else pass min/max/num_sectors -->
   <arg name="config_path" default="" />
   <arg name="min_range" default="0.25" />
   <arg name="max_range" default="3.0" />
@@ -30,4 +30,3 @@
     <param name="num_sectors" value="$(arg num_sectors)" />
   </node>
 </launch>
-

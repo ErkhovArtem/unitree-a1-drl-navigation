@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Остановка контейнера
+# Stop stack (run from docker/)
 docker compose down
 
-echo "Контейнер остановлен"
+echo "Container stopped."

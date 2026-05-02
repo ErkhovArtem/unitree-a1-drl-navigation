@@ -1,4 +1,4 @@
 #!/bin/bash
 
-# Сборка образа с использованием docker compose
+# Build image via docker compose (run from docker/)
 docker compose build

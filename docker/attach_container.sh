@@ -1,4 +1,4 @@
 #!/bin/bash
 
-# Подключение к контейнеру
+# Interactive bash in the running container
 docker exec -it ros_melodic_container bash

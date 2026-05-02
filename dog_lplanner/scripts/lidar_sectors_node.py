@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ROS1 нода для обработки лидара: LaserScan -> сектора (как для политики).
+ROS1 node: LaserScan → sector distances (policy-compatible layout).
 
-Подписывается:
-- /scan (sensor_msgs/LaserScan)
-
-Публикует:
-- ~sectors_topic (std_msgs/Float32MultiArray): массив из N секторов (метры)
-- ~lidar_viz_topic (visualization_msgs/MarkerArray) (опционально): визуализация секторов
+Subscribes: ~scan_topic (LaserScan).
+Publishes: ~sectors_topic (Float32MultiArray, meters); optional MarkerArray on ~lidar_viz_topic.
 """
 
 from pathlib import Path
@@ -110,9 +106,6 @@ class LidarSectorsNode:
         from geometry_msgs.msg import Point  # local import
 
         for sector_idx in range(n):
-            # Конвенция секторов (см. lidar_processor_ros1.py):
-            # - sector 0 смотрит вперёд (0 рад)
-            # - индексы возрастают по часовой стрелке
             angle_center = -float(sector_idx) * float(sector_angle)
             dist = float(sectors[sector_idx])
 

@@ -1,43 +1,41 @@
-# Конфигурация для инференса политики в ROS1 Melodic
-# Адаптировано из configs/a1.yaml для ROS1
+# Policy inference (ROS1 Melodic). Derived from training config configs/a1.yaml.
 
-# Масштаб выходных команд [vx, vy, w] (м/с, м/с, рад/с)
-cmd_scale: [0.3, 0.3, 0.3]
+# Output command scale [vx, vy, w] (m/s, m/s, rad/s) applied after tanh policy output
+cmd_scale: [0.5, 0.5, 0.5]
 
-# Параметры лидара
-min_lidar_range: 0.25  # Минимальная дальность (м), исключаем робота
-max_lidar_range: 3.0   # Максимальная дальность (м)
-num_sectors: 40        # Количество секторов
+# Lidar sector pipeline
+min_lidar_range: 0.25  # Drop returns closer than this (robot body), meters
+max_lidar_range: 3.0
+num_sectors: 40
 
-# Параметры нормализации
-max_angular_vel: 0.35  # Максимальная угловая скорость для нормализации (рад/с)
-max_distance: 10.75    # Максимальное расстояние до цели (м)
+# Observation normalization
+max_angular_vel: 0.35  # rad/s, for angular velocity channel
+max_distance: 10.75    # meters, for goal distance normalization
 
-# Параметры SAC политики
+# SAC (history used at inference)
 sac:
-  history_length: 3        # Длина истории действий для Actor
-  critic_history_length: 3  # Длина истории для Critic (не используется в инференсе)
+  history_length: 3
+  critic_history_length: 3  # Training only; not used in this ONNX inference path
 
-# Пути к файлам (относительно директории dog_lplanner)
+# Paths relative to dog_lplanner package root unless overridden by ROS params
 model_path: "sac_actor.onnx"
 config_path: "config/a1_ros1.yaml"
 
-# ROS топики
+# ROS topics (documentation; node params may override)
 scan_topic: "/scan"
-high_state_topic: "/high_state"  # unitree_legged_msgs/HighState, угловая скорость rotateSpeed
-clicked_point_topic: "/clicked_point"  # Топик для целевой точки из RViz
+high_state_topic: "/high_state"  # unitree_legged_msgs/HighState; use rotateSpeed for w
+clicked_point_topic: "/clicked_point"
 high_cmd_topic: "/high_cmd"
 
-# Фреймы для tf преобразований
-map_frame: "map"  # Фрейм карты (откуда приходит clicked_point)
-base_frame: "base_link"  # Локальный фрейм робота
+# TF frames
+map_frame: "map"
+base_frame: "base_link"
 
-# Параметры цели (fallback, если нет clicked_point)
-target_x: 5.0  # Координата X цели (м) - используется только если clicked_point не получен
-target_y: 0.0  # Координата Y цели (м) - используется только если clicked_point не получен
+# Default goal in base_link if no /clicked_point received yet
+target_x: 5.0
+target_y: 0.0
 
-# Частота инференса (Hz)
 inference_rate: 10.0
 
-# Расстояние до цели в base_link (м): при dist <= порога /policy_running -> false
+# Stop policy when distance to goal in base_link is below this (meters); sets /policy_running false
 goal_reached_distance: 0.2

@@ -11,7 +11,7 @@ source /opt/ros/melodic/setup.bash
 : "${ROS_MASTER_URI:=http://192.168.123.12:11311}"
 export ROS_MASTER_URI
 
-# ROS_IP: явно заданный в окружении контейнера сохраняем; иначе авто (см. ros_detect_ip.sh)
+# Keep explicit ROS_IP from the environment; otherwise ros_detect_ip.sh picks one
 # shellcheck source=/dev/null
 [ -f /ros_detect_ip.sh ] && . /ros_detect_ip.sh
 

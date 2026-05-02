@@ -1,17 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Минимальный TF-lookup для ROS1 без tf2_ros/tf2_py.
+Lightweight TF lookups without tf2_py (Melodic’s tf2_py targets Python 2; this stack uses Python 3).
 
-Причина: в ROS Melodic tf2_py собран под Python2, а инференс-скрипт у нас на Python3
-(из-за onnxruntime). Поэтому используем только сообщения /tf и чистый python.
-
-Поддерживает:
-- Подписку на /tf и /tf_static (если есть)
-- Поиск преобразования между фреймами (BFS по графу)
-- Преобразование PointStamped (geometry_msgs/PointStamped) между фреймами
-
-Внимание: временные метки игнорируются (берём последние известные трансформы).
+Subscribes to /tf and /tf_static, BFS-composes edges, transforms PointStamped.
+Timestamps are ignored (latest transforms only).
 """
 
 from collections import defaultdict, deque
@@ -89,7 +82,6 @@ class TFGraph:
         self._adj: Dict[str, Set[str]] = defaultdict(set)
 
         self._sub_tf = rospy.Subscriber("/tf", TFMessage, self._tf_cb, queue_size=20)
-        # /tf_static может отсутствовать — подписка не мешает
         self._sub_tf_static = rospy.Subscriber("/tf_static", TFMessage, self._tf_cb, queue_size=5)
 
     def _tf_cb(self, msg: TFMessage):

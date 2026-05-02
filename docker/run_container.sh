@@ -1,12 +1,11 @@
 #!/bin/bash
 
-# Разрешаем подключения к X-серверу
+# Allow local Docker clients to use host X11
 xhost +local:docker
 
-# Запускаем контейнер в фоне
-echo "Запускаю контейнер ros_melodic_container в фоне..."
+echo "Starting ros_melodic_container (detached)..."
 docker compose up -d
 
-echo "Контейнер готов. Теперь ты можешь:"
-echo "1. Приаттачиться через VS Code (Docker extension -> Right click -> Attach Visual Studio Code)"
-echo "2. Открыть терминал вручную: ./attach_container.sh"
+echo "Container is up. Next steps:"
+echo "  1. Attach with VS Code Docker extension, or"
+echo "  2. Shell: ./attach_container.sh"

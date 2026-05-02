@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Sourced by /ros_entrypoint.sh and /root/.bashrc — выставляет ROS_IP, если он не задан.
-# Нужен для публикации топиков с контейнера (host network): робот/другие машины
-# должны видеть достижимый IP, а не 127.0.0.1.
+# Sourced from /ros_entrypoint.sh and /root/.bashrc. Sets ROS_IP when unset so topics
+# advertised from the container (host network) use a reachable address, not 127.0.0.1.
 
 unset ROS_HOSTNAME 2>/dev/null || true
 
@@ -17,7 +16,7 @@ _ros_pick_ipv4() {
       echo "$ip"
       return
     fi
-    # Исходящий адрес по маршруту по умолчанию (master ещё недоступен и т.п.)
+    # Fallback: default-route source IP (e.g. roscore not routable yet)
     ip="$(ip -4 route get 8.8.8.8 2>/dev/null | sed -n 's/.*[[:space:]]src[[:space:]]\([0-9.]*\).*/\1/p' | head -n1)"
     if [ -n "$ip" ]; then
       echo "$ip"
