@@ -70,6 +70,14 @@ source /root/catkin_ws/install/setup.bash
 
 ## Usage
 
+0. Wieghts converter:
+   ```
+   python3 /home/griga/unitree-a1-drl-navigation/dog_lplanner/scripts/export_to_onnx.py \
+  --model_path /home/griga/unitree-a1-drl-navigation/sac_actor.pth \
+  --config_path /home/griga/unitree-a1-drl-navigation/dog_lplanner/config/a1_ros1.yaml \
+  --output_path /home/griga/unitree-a1-drl-navigation/sac_actor.onnx
+   ```
+
 1. **Launch policy inference, GUI, and (by default) RViz**
 
    ```bash

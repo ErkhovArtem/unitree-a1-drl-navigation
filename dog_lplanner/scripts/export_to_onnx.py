@@ -18,11 +18,33 @@ import yaml
 import numpy as np
 from pathlib import Path
 import sys
+import torch.nn as nn
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from policy.SAC.SAC_actor import DiagGaussianActor
+try:
+    from policy.SAC.SAC_actor import DiagGaussianActor
+except ModuleNotFoundError:
+    class DiagGaussianActor(nn.Module):
+        """Fallback actor used when training package sources are unavailable."""
+
+        def __init__(self, obs_dim, action_dim, hidden_dim, hidden_depth, log_std_bounds):
+            super().__init__()
+            if isinstance(hidden_dim, int):
+                hidden_sizes = [hidden_dim] * hidden_depth
+            else:
+                hidden_sizes = list(hidden_dim)
+
+            layers = []
+            in_dim = obs_dim
+            for h in hidden_sizes:
+                layers.append(nn.Linear(in_dim, h))
+                layers.append(nn.ReLU())
+                in_dim = h
+            layers.append(nn.Linear(in_dim, 2 * action_dim))
+            self.trunk = nn.Sequential(*layers)
+            self.log_std_bounds = log_std_bounds
 
 
 class DeterministicActorWrapper(torch.nn.Module):
